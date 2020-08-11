@@ -289,6 +289,7 @@ func (c HttpClient) getReaderWithHeader(url string, header http.Header) (io.Read
 	}
 
 	duration := initialBackoff
+	serverSideFailureRetries := 10
 	for attempt := 1; ; attempt++ {
 		c.logger.Info("GET %s: attempt #%d", url, attempt)
 		resp, err := c.client.Do(req.WithContext(ctx))
@@ -299,6 +300,12 @@ func (c HttpClient) getReaderWithHeader(url string, header http.Header) (io.Read
 				return resp.Body, resp.StatusCode, cancelFn, nil
 			}
 			resp.Body.Close()
+			serverSideFailureRetries--
+			if serverSideFailureRetries <= 0 {
+				c.client.CloseIdleConnections()
+				serverSideFailureRetries = 10
+			}
+
 		} else {
 			c.logger.Info("GET error: %v", err)
 		}
